@@ -1,3 +1,23 @@
 {
-    "${0} is flower-pet": "${0} 正在输入"
+    "Desktop Flower Pet": "养一朵你们的花",
+    "Enabled": "种下",
+    "Reset Growth": "重新发芽",
+    "Your little flower that grows as you chat.": "一个随着你聊天而成长的可爱小花。",
+    "Growth Points:": "成长点数：",
+    "Water": "浇水",
+    "Fertilize": "施肥",
+    "Catch Bug": "捉虫",
+    "Change Seed": "换种子",
+    "On Cooldown": "不要太勤奋哦~",
+    "A bug appeared!": "出现虫子了！",
+    "Choose a new seed:": "选择新种子：",
+    "Flower Series": "花卉系列",
+    "Vegetable Series": "蔬菜系列",
+    "Fruit Series": "水果系列",
+    "Resetting will start your progress over with a new plant. Are you sure?": "确定要铲掉努力生长的植物吗？",
+    "Nurture with {name2}": "与 {name2} 共同养育",
+    "Seed Type": "种子类型",
+    "Current Status": "当前状态",
+    "Stage:": "阶段:",
+    "Growth:": "成长值:"
 }

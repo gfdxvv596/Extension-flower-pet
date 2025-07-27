@@ -1,207 +1,214 @@
-// index.js (v2.1 - 修复移动端切换Bug)
 import {
+    name2, // 导入角色名
     eventSource,
     event_types,
     saveSettingsDebounced,
-    ui, // 新增导入 ui 对象
 } from '../../../../script.js';
 import { extension_settings } from '../../../extensions.js';
 import { t } from '../../../i18n.js';
 
 const MODULE = 'flower_pet';
 
-// --- 配置项 (保持不变) ---
-const COOLDOWNS = {
-    WATER: 30 * 60 * 1000,
-    FERTILIZE: 4 * 60 * 60 * 1000,
+// --- 配置和常量 ---
+const LONG_PRESS_DURATION = 300;
+const WATER_COOLDOWN = 15 * 60 * 1000; // 15分钟
+const FERTILIZE_COOLDOWN = 15 * 60 * 1000; // 15分钟
+const BUG_CHANCE = 0.05;
+
+const SEED_SERIES = {
+    flowers: { name: t`Flower Series`, stages: [ { threshold: 0, visual: '🌱' }, { threshold: 10, visual: '🌿' }, { threshold: 30, visual: '🍀' }, { threshold: 60, visual: '🌸' }, { threshold: 100, visual: '🌻' }, { threshold: 150, visual: '🌷' }, { threshold: 220, visual: '🌹' }, { threshold: 300, visual: '🌺' }, ], },
+    vegetables: { name: t`Vegetable Series`, stages: [ { threshold: 0, visual: '🌱' }, { threshold: 10, visual: '🌿' }, { threshold: 30, visual: '🥬' }, { threshold: 60, visual: '🥦' }, { threshold: 100, visual: '🥕' }, { threshold: 150, visual: '🌽' }, { threshold: 220, visual: '🍅' }, { threshold: 300, visual: '🍆' }, ], },
+    fruits: { name: t`Fruit Series`, stages: [ { threshold: 0, visual: '🌱' }, { threshold: 10, visual: '🌿' }, { threshold: 30, visual: '🍇' }, { threshold: 60, visual: '🍓' }, { threshold: 100, visual: '🍉' }, { threshold: 150, visual: '🍍' }, { threshold: 220, visual: '🍎' }, { threshold: 300, visual: '🍑' }, ], },
 };
-const REWARDS = {
-    CHAT: 1,
-    WATER: 10,
-    FERTILIZE: 50,
-    DEBUG: 25,
-};
-const PEST_CHANCE = 0.05;
-const PEST_CHECK_INTERVAL = 5 * 60 * 1000;
-const SEED_CATALOGUE = {
-    default_flower: {
-        name: '太阳花',
-        stages: [
-            { threshold: 0, visual: '🌱', name: '种子' },
-            { threshold: 10, visual: '🌿', name: '幼苗' },
-            { threshold: 30, visual: '🍀', name: '三叶草' },
-            { threshold: 60, visual: '🌸', name: '小花' },
-            { threshold: 100, visual: '🌻', name: '向日葵' },
-        ],
-    },
-    rose_bush: {
-        name: '玫瑰丛',
-        stages: [
-            { threshold: 0, visual: '🪴', name: '花盆' },
-            { threshold: 20, visual: '🌿', name: '新芽' },
-            { threshold: 50, visual: '🍃', name: '绿叶' },
-            { threshold: 90, visual: '🌹', name: '玫瑰' },
-            { threshold: 150, visual: '🥀', name: '盛开的玫瑰' },
-        ],
-    },
-    magic_tree: {
-        name: '魔法树',
-        stages: [
-            { threshold: 0, visual: '🌰', name: '魔力坚果' },
-            { threshold: 50, visual: '🌳', name: '小树苗' },
-            { threshold: 150, visual: '🌲', name: '成长中的树' },
-            { threshold: 300, visual: '✨', name: '闪光' },
-            { threshold: 500, visual: '🌟', name: '星之树' },
-        ],
-    },
-};
+
 const defaultSettings = {
     enabled: true,
     growthPoints: 0,
-    currentSeedType: 'default_flower',
-    hasPest: false,
+    seedType: 'flowers',
+    coParent: false,
+    hasBug: false,
     lastWatered: 0,
     lastFertilized: 0,
-    position: { x: 20, y: 20 },
+    position: { top: null, left: null },
 };
+
+// --- 状态和DOM引用 ---
+let isDragging = false, pressTimer = null, offsetX, offsetY;
+let petContainer, stageDisplay, bugDisplay, progressFill, actionsContainer;
+let waterButton, fertilizeButton, bugButton;
+
+// --- 核心函数 ---
 
 function getSettings() {
     if (extension_settings[MODULE] === undefined) {
         extension_settings[MODULE] = structuredClone(defaultSettings);
     }
-    for (const key in defaultSettings) {
-        if (extension_settings[MODULE][key] === undefined) {
-            extension_settings[MODULE][key] = defaultSettings[key];
-        }
-    }
+    Object.assign(extension_settings[MODULE], { ...defaultSettings, ...extension_settings[MODULE] });
     return extension_settings[MODULE];
 }
 
-// --- UI 创建和管理 (保持不变) ---
+function handlePressStart(e) { e.preventDefault(); clearTimeout(pressTimer); pressTimer = setTimeout(() => { isDragging = true; const petRect = petContainer.getBoundingClientRect(); const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX; const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY; offsetX = clientX - petRect.left; offsetY = clientY - petRect.top; petContainer.style.cursor = 'grabbing'; }, LONG_PRESS_DURATION); }
+function handlePressMove(e) { if (!isDragging) return; e.preventDefault(); const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX; const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY; let newLeft = clientX - offsetX; let newTop = clientY - offsetY; const maxLeft = window.innerWidth - petContainer.offsetWidth; const maxTop = window.innerHeight - petContainer.offsetHeight; newLeft = Math.max(0, Math.min(newLeft, maxLeft)); newTop = Math.max(0, Math.min(newTop, maxTop)); petContainer.style.left = `${newLeft}px`; petContainer.style.top = `${newTop}px`; }
+function handlePressEnd() { clearTimeout(pressTimer); if (isDragging) { isDragging = false; petContainer.style.cursor = 'grab'; const settings = getSettings(); settings.position.left = parseInt(petContainer.style.left, 10); settings.position.top = parseInt(petContainer.style.top, 10); saveSettingsDebounced(); } else { toggleActionsMenu(); } }
+function toggleActionsMenu() { actionsContainer.classList.toggle('visible'); }
+function showFloatingAnimation(text) { const animation = document.createElement('div'); animation.className = 'floating-animation'; animation.textContent = text; petContainer.appendChild(animation); setTimeout(() => animation.remove(), 1500); }
+
+function waterPlant() {
+    const settings = getSettings();
+    const now = Date.now();
+    if ((now - settings.lastWatered) < WATER_COOLDOWN) {
+        showFloatingAnimation(`🚫 ${t`On Cooldown`}`);
+    } else {
+        settings.lastWatered = now;
+        addGrowthPoints(5, 'water');
+    }
+}
+
+function fertilizePlant() {
+    const settings = getSettings();
+    const now = Date.now();
+    if ((now - settings.lastFertilized) < FERTILIZE_COOLDOWN) {
+        showFloatingAnimation(`🚫 ${t`On Cooldown`}`);
+    } else {
+        settings.lastFertilized = now;
+        addGrowthPoints(5, 'fertilize');
+    }
+}
+
+function catchBug() { const settings = getSettings(); settings.hasBug = false; addGrowthPoints(20, 'bug'); }
+
+function addGrowthPoints(points, reason = 'chat') {
+    const settings = getSettings();
+    if (!settings.enabled || settings.hasBug) return;
+    settings.growthPoints += points;
+    updatePetUI();
+    updateSettingsUI();
+    saveSettingsDebounced();
+    let icon = reason === 'water' ? '💧' : reason === 'fertilize' ? '✨' : reason === 'bug' ? '✔️' : '💬';
+    showFloatingAnimation(`+${points} ${icon}`);
+}
+
+function resetPlant() {
+    if (!confirm(t`Resetting will start your progress over with a new plant. Are you sure?`)) return;
+    const settings = getSettings();
+    settings.growthPoints = 0;
+    settings.hasBug = false;
+    settings.lastWatered = 0;
+    settings.lastFertilized = 0;
+    saveSettingsDebounced();
+    updatePetUI();
+    updateSettingsUI();
+}
+
+function updateSettingsUI() {
+    const settings = getSettings();
+    const statusStage = document.getElementById('flower-pet-status-stage');
+    const statusGrowth = document.getElementById('flower-pet-status-growth');
+    if (!statusStage || !statusGrowth) return;
+    const series = SEED_SERIES[settings.seedType] || SEED_SERIES.flowers;
+    let currentStage = series.stages[0];
+    for (let i = series.stages.length - 1; i >= 0; i--) { if (settings.growthPoints >= series.stages[i].threshold) { currentStage = series.stages[i]; break; } }
+    statusStage.textContent = `${currentStage.visual} (${series.stages.indexOf(currentStage) + 1} / ${series.stages.length})`;
+    statusGrowth.textContent = `${settings.growthPoints}`;
+}
+
+function addExtensionSettings(settings) {
+    const settingsContainer = document.getElementById('extensions_settings');
+    if (!settingsContainer) return;
+    const inlineDrawer = document.createElement('div');
+    inlineDrawer.classList.add('inline-drawer');
+    const inlineDrawerToggle = document.createElement('div');
+    inlineDrawerToggle.classList.add('inline-drawer-toggle', 'inline-drawer-header');
+    inlineDrawerToggle.innerHTML = `<b>${t`Desktop Flower Pet`}</b><div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>`;
+    const inlineDrawerContent = document.createElement('div');
+    inlineDrawerContent.classList.add('inline-drawer-content');
+    inlineDrawer.append(inlineDrawerToggle, inlineDrawerContent);
+    const enabledLabel = document.createElement('label');
+    enabledLabel.classList.add('checkbox_label');
+    enabledLabel.innerHTML = `<input id="flowerPetEnabled" type="checkbox"><span>${t`Enabled`}</span>`;
+    const enabledCheckbox = enabledLabel.querySelector('#flowerPetEnabled');
+    enabledCheckbox.checked = settings.enabled;
+    enabledCheckbox.addEventListener('change', () => { settings.enabled = enabledCheckbox.checked; saveSettingsDebounced(); updatePetUI(); });
+    const coParentLabel = document.createElement('label');
+    coParentLabel.classList.add('checkbox_label');
+    coParentLabel.innerHTML = `<input id="flowerPetCoParent" type="checkbox"><span>${t`Nurture with {name2}`.replace('{name2}', name2)}</span>`;
+    const coParentCheckbox = coParentLabel.querySelector('#flowerPetCoParent');
+    coParentCheckbox.checked = settings.coParent;
+    coParentCheckbox.addEventListener('change', () => { settings.coParent = coParentCheckbox.checked; saveSettingsDebounced(); updatePetUI(); });
+    const seedSelectorDiv = document.createElement('div');
+    seedSelectorDiv.classList.add('flex-container');
+    const seedLabel = document.createElement('label');
+    seedLabel.textContent = t`Seed Type`;
+    const seedSelect = document.createElement('select');
+    seedSelect.classList.add('text_pole');
+    for (const key in SEED_SERIES) { const option = document.createElement('option'); option.value = key; option.textContent = SEED_SERIES[key].name; if (key === settings.seedType) option.selected = true; seedSelect.append(option); }
+    seedSelect.addEventListener('change', () => { if (confirm(t`Resetting will start your progress over with a new plant. Are you sure?`)) { settings.seedType = seedSelect.value; settings.growthPoints = 0; settings.hasBug = false; settings.lastWatered = 0; settings.lastFertilized = 0; saveSettingsDebounced(); updatePetUI(); updateSettingsUI(); } else { seedSelect.value = settings.seedType; } });
+    seedSelectorDiv.append(seedLabel, seedSelect);
+    const statusDiv = document.createElement('div');
+    statusDiv.classList.add('status-box');
+    statusDiv.innerHTML = `<h4>${t`Current Status`}</h4><div class="status-line"><span>${t`Stage:`}</span><span id="flower-pet-status-stage"></span></div><div class="status-line"><span>${t`Growth:`}</span><span id="flower-pet-status-growth"></span></div>`;
+    const resetDiv = document.createElement('div');
+    resetDiv.classList.add('flex-container');
+    const resetButton = document.createElement('button');
+    resetButton.classList.add('menu_button', 'fa-solid', 'fa-undo');
+    resetButton.title = t`Reset Growth`;
+    resetButton.addEventListener('click', resetPlant);
+    const resetLabel = document.createElement('label');
+    resetLabel.textContent = t`Reset Growth`;
+    resetDiv.append(resetButton, resetLabel);
+    inlineDrawerContent.append(enabledLabel, coParentLabel, seedSelectorDiv, statusDiv, resetDiv);
+    settingsContainer.append(inlineDrawer);
+}
+
 function createPetUI() {
     if (document.getElementById('flower-pet-container')) return;
-    const container = document.createElement('div');
-    container.id = 'flower-pet-container';
-    container.innerHTML = `
-        <div class="pet-body">
-            <div id="flower-pet-stage"></div>
-            <div class="pest-overlay">🐛</div>
-            <div class="pet-controls">
-                <button id="flower-pet-water" class="pet-action-button" title="浇水"><i class="fa-solid fa-tint"></i></button>
-                <button id="flower-pet-fertilize" class="pet-action-button" title="施肥"><i class="fa-solid fa-seedling"></i></button>
-                <button id="flower-pet-debug" class="pet-action-button" title="捉虫"><i class="fa-solid fa-bug-slash"></i></button>
-                <button id="flower-pet-change-seed" class="pet-action-button" title="换种子"><i class="fa-solid fa-recycle"></i></button>
-            </div>
-        </div>
-        <div class="pet-info-panel">
-             <span id="flower-pet-name"></span>: <span id="flower-pet-points"></span>
-        </div>
-    `;
-    document.body.append(container);
-    const body = container.querySelector('.pet-body');
-    body.addEventListener('click', (e) => {
-        if (container.classList.contains('dragging-check')) {
-            container.classList.remove('dragging-check'); return;
-        }
-        e.stopPropagation(); container.classList.toggle('expanded');
-    });
-    document.getElementById('flower-pet-water').addEventListener('click', handleWater);
-    document.getElementById('flower-pet-fertilize').addEventListener('click', handleFertilize);
-    document.getElementById('flower-pet-debug').addEventListener('click', handleDebug);
-    document.getElementById('flower-pet-change-seed').addEventListener('click', showSeedSelection);
-    makeDraggable(container);
+    petContainer = document.createElement('div');
+    petContainer.id = 'flower-pet-container';
+    petContainer.innerHTML = `<div id="flower-pet-display"><div id="flower-pet-stage"></div><div id="flower-pet-bug" style="display: none;">🐞</div></div><div id="flower-pet-progress-bar"><div id="flower-pet-progress-fill"></div></div><div id="flower-pet-actions"><button id="flower-pet-water" title="${t`Water`}">${'💧'}</button><button id="flower-pet-fertilize" title="${t`Fertilize`}">${'✨'}</button><button id="flower-pet-bug-action" title="${t`Catch Bug`}">${'🥅'}</button></div>`;
+    document.body.appendChild(petContainer);
+    stageDisplay = document.getElementById('flower-pet-stage'); bugDisplay = document.getElementById('flower-pet-bug'); progressFill = document.getElementById('flower-pet-progress-fill'); actionsContainer = document.getElementById('flower-pet-actions'); waterButton = document.getElementById('flower-pet-water'); fertilizeButton = document.getElementById('flower-pet-fertilize'); bugButton = document.getElementById('flower-pet-bug-action');
+    petContainer.addEventListener('mousedown', handlePressStart); document.addEventListener('mousemove', handlePressMove); document.addEventListener('mouseup', handlePressEnd); petContainer.addEventListener('touchstart', handlePressStart, { passive: false }); document.addEventListener('touchmove', handlePressMove, { passive: false }); document.addEventListener('touchend', handlePressEnd);
+    waterButton.addEventListener('click', waterPlant); fertilizeButton.addEventListener('click', fertilizePlant); bugButton.addEventListener('click', catchBug);
 }
 
 function updatePetUI() {
     const settings = getSettings();
-    const container = document.getElementById('flower-pet-container');
-    if (!container) return;
-    container.style.display = settings.enabled ? 'block' : 'none';
+    if (!petContainer) return;
+    petContainer.style.display = settings.enabled ? 'flex' : 'none';
     if (!settings.enabled) return;
-    container.style.right = `${settings.position.x}px`;
-    container.style.bottom = `${settings.position.y}px`;
-    container.style.left = 'auto';
-    container.style.top = 'auto';
-    const seed = SEED_CATALOGUE[settings.currentSeedType] || SEED_CATALOGUE.default_flower;
-    let currentStage = seed.stages[0];
-    for (let i = seed.stages.length - 1; i >= 0; i--) {
-        if (settings.growthPoints >= seed.stages[i].threshold) {
-            currentStage = seed.stages[i]; break;
-        }
-    }
-    document.getElementById('flower-pet-stage').textContent = currentStage.visual;
-    document.getElementById('flower-pet-name').textContent = currentStage.name;
-    document.getElementById('flower-pet-points').textContent = settings.growthPoints;
-    document.querySelector('.pest-overlay').style.display = settings.hasPest ? 'flex' : 'none';
+    petContainer.title = settings.coParent ? t`Nurture with {name2}`.replace('{name2}', name2) : t`Your little flower that grows as you chat.`;
+    const series = SEED_SERIES[settings.seedType] || SEED_SERIES.flowers;
+    let currentStage = series.stages[0], nextStage = series.stages[1] || currentStage;
+    for (let i = series.stages.length - 1; i >= 0; i--) { if (settings.growthPoints >= series.stages[i].threshold) { currentStage = series.stages[i]; nextStage = series.stages[i + 1] || currentStage; break; } }
+    stageDisplay.textContent = currentStage.visual;
+    const progress = (settings.growthPoints - currentStage.threshold) / (nextStage.threshold - currentStage.threshold || 1);
+    progressFill.style.width = `${Math.min(100, progress * 100)}%`;
+    bugDisplay.style.display = settings.hasBug ? 'block' : 'none';
+    bugButton.style.display = settings.hasBug ? 'flex' : 'none';
+    stageDisplay.style.transform = settings.hasBug ? 'rotate(-5deg)' : 'rotate(0deg)';
     const now = Date.now();
-    const waterButton = document.getElementById('flower-pet-water');
-    const fertilizeButton = document.getElementById('flower-pet-fertilize');
-    const debugButton = document.getElementById('flower-pet-debug');
-    waterButton.disabled = (now - settings.lastWatered < COOLDOWNS.WATER);
-    fertilizeButton.disabled = (now - settings.lastFertilized < COOLDOWNS.FERTILIZE);
-    debugButton.style.display = settings.hasPest ? 'flex' : 'none';
-    waterButton.style.display = fertilizeButton.style.display = settings.hasPest ? 'none' : 'flex';
-    document.getElementById('flower-pet-change-seed').style.display = settings.hasPest ? 'none' : 'flex';
-    if (waterButton.disabled) waterButton.title = `浇水 (冷却中: ${Math.ceil((COOLDOWNS.WATER - (now - settings.lastWatered)) / 60000)}m)`;
-    else waterButton.title = '浇水';
+    waterButton.disabled = (now - settings.lastWatered) < WATER_COOLDOWN;
+    fertilizeButton.disabled = (now - settings.lastFertilized) < FERTILIZE_COOLDOWN;
+    if (settings.position.top !== null) { petContainer.style.top = `${settings.position.top}px`; petContainer.style.left = `${settings.position.left}px`; } else { setTimeout(() => { const margin = 20; try { petContainer.style.top = `${window.innerHeight - petContainer.offsetHeight - margin}px`; petContainer.style.left = `${window.innerWidth - petContainer.offsetWidth - margin}px`; } catch(e) {} }, 0); }
 }
 
-// --- 交互逻辑、随机事件、拖动逻辑、辅助函数 (全部保持不变) ---
-function addGrowthPoints(amount, sourceIcon) { const settings = getSettings(); settings.growthPoints += amount; showFeedbackAnimation(sourceIcon || `+${amount}`); updatePetUI(); saveSettingsDebounced(); }
-function handleWater(e) { e.stopPropagation(); addGrowthPoints(REWARDS.WATER, '💧'); getSettings().lastWatered = Date.now(); updatePetUI(); }
-function handleFertilize(e) { e.stopPropagation(); addGrowthPoints(REWARDS.FERTILIZE, '✨'); getSettings().lastFertilized = Date.now(); updatePetUI(); }
-function handleDebug(e) { e.stopPropagation(); const settings = getSettings(); if (!settings.hasPest) return; settings.hasPest = false; addGrowthPoints(REWARDS.DEBUG, '✅'); }
-function randomPestEvent() { const settings = getSettings(); if (!settings.enabled || settings.hasPest) return; if (Math.random() < PEST_CHANCE) { settings.hasPest = true; showFeedbackAnimation('🐛!'); updatePetUI(); saveSettingsDebounced(); } }
-function makeDraggable(element) { let isDragging = false; let offsetX, offsetY; function onMouseDown(e) { isDragging = true; element.classList.add('dragging'); element.classList.add('dragging-check'); setTimeout(() => element.classList.remove('dragging-check'), 200); const rect = element.getBoundingClientRect(); offsetX = e.clientX - rect.left; offsetY = e.clientY - rect.top; document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); } function onMouseMove(e) { if (!isDragging) return; let newX = window.innerWidth - (e.clientX - offsetX + element.offsetWidth); let newY = window.innerHeight - (e.clientY - offsetY + element.offsetHeight); newX = Math.max(0, Math.min(newX, window.innerWidth - element.offsetWidth)); newY = Math.max(0, Math.min(newY, window.innerHeight - element.offsetHeight)); element.style.right = `${newX}px`; element.style.bottom = `${newY}px`; } function onMouseUp(e) { isDragging = false; element.classList.remove('dragging'); const settings = getSettings(); settings.position.x = parseInt(element.style.right); settings.position.y = parseInt(element.style.bottom); saveSettingsDebounced(); document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); } element.addEventListener('mousedown', onMouseDown); }
-function showFeedbackAnimation(content) { const container = document.getElementById('flower-pet-container'); if (!container) return; const feedback = document.createElement('div'); feedback.className = 'feedback-animation'; feedback.innerHTML = content; container.appendChild(feedback); setTimeout(() => feedback.remove(), 1000); }
-function showSeedSelection(e) { e.stopPropagation(); document.getElementById('flower-pet-container').classList.remove('expanded'); const backdrop = document.createElement('div'); backdrop.className = 'seed-modal-backdrop'; backdrop.addEventListener('click', () => backdrop.remove()); const modal = document.createElement('div'); modal.className = 'seed-modal-content'; modal.addEventListener('click', (ev) => ev.stopPropagation()); modal.innerHTML = `<h3>选择新的种子</h3><p>选择一个新的植物开始培养。注意：这将会重置你当前的成长点数。</p><div class="seed-selection"></div>`; const selectionContainer = modal.querySelector('.seed-selection'); for (const [seedId, seedData] of Object.entries(SEED_CATALOGUE)) { const option = document.createElement('div'); option.className = 'seed-option'; option.innerHTML = `<div class="emoji">${seedData.stages[seedData.stages.length-1].visual}</div><div class="name">${seedData.name}</div>`; option.addEventListener('click', () => { if (confirm(`确定要切换到 "${seedData.name}" 吗？当前进度将清零。`)) { const settings = getSettings(); settings.currentSeedType = seedId; settings.growthPoints = 0; settings.hasPest = false; updatePetUI(); saveSettingsDebounced(); backdrop.remove(); } }); selectionContainer.appendChild(option); } backdrop.appendChild(modal); document.body.appendChild(backdrop); }
-
-// =================================================================
-// ===== 关键修复区域 START =====
-// =================================================================
-
-/**
- * @name ensurePetUIExists
- * @description 这是一个“守护”函数。它确保宠物的UI元素始终存在于页面上。
- * 如果UI元素不存在（例如，在视图切换后被移除），它会重新创建UI。
- * 然后，它总是会更新UI以反映最新的状态。
- */
-function ensurePetUIExists() {
-    if (!document.getElementById('flower-pet-container')) {
-        // 如果悬浮球不见了，就重新创建它
-        createPetUI();
-    }
-    // 无论如何，都更新一次UI（以应用位置、状态等）
-    updatePetUI();
+function onMessage() {
+    const settings = getSettings();
+    if (settings.hasBug) return;
+    addGrowthPoints(1, 'chat');
+    if (Math.random() < BUG_CHANCE) { settings.hasBug = true; saveSettingsDebounced(); updatePetUI(); showFloatingAnimation(`! 🐞`); }
 }
 
-
-// --- 初始化 ---
+// --- 启动逻辑 ---
 (function () {
-    // 扩展设置菜单部分可以保持和之前类似
-    // (此处省略了 addExtensionSettings 的代码，可以复用)
-
-    // 首次加载时，确保UI存在
-    ensurePetUIExists();
-
-    // 监听被动成长事件
-    eventSource.on(event_types.MESSAGE_SENT, () => addGrowthPoints(REWARDS.CHAT));
-    eventSource.on(event_types.MESSAGE_RECEIVED, () => addGrowthPoints(REWARDS.CHAT));
-    
-    // 定时检查害虫
-    setInterval(randomPestEvent, PEST_CHECK_INTERVAL);
-
-    // 窗口大小改变时重新检查边界
-    window.addEventListener('resize', updatePetUI);
-
-    // 【重要修复】监听SillyTavern的UI更新事件
-    // 每当UI发生重大变化（包括切换到移动视图），就调用我们的守护函数
-    eventSource.on(event_types.UI_UPDATED, ensurePetUIExists);
-    
-    // 为保险起见，也在聊天切换时检查
-    eventSource.on(event_types.CHAT_CHANGED, ensurePetUIExists);
+    const settings = getSettings();
+    addExtensionSettings(settings);
+    createPetUI();
+    updatePetUI();
+    updateSettingsUI();
+    eventSource.on(event_types.MESSAGE_SENT, () => onMessage());
+    eventSource.on(event_types.MESSAGE_RECEIVED, () => onMessage());
+    eventSource.on(event_types.CHAT_CHANGED, () => { updatePetUI(); updateSettingsUI(); });
+    window.addEventListener('resize', () => { if(petContainer && getSettings().enabled){ try { const maxLeft = window.innerWidth - petContainer.offsetWidth; const maxTop = window.innerHeight - petContainer.offsetHeight; petContainer.style.left = `${Math.min(parseInt(petContainer.style.left), maxLeft)}px`; petContainer.style.top = `${Math.min(parseInt(petContainer.style.top), maxTop)}px`; } catch(e) {} } });
+    setInterval(() => { if (getSettings().enabled) { updatePetUI(); updateSettingsUI(); } }, 5000);
 })();
-
-// =================================================================
-// ===== 关键修复区域 END =====
-// =================================================================
