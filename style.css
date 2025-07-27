@@ -1,181 +1,74 @@
 /*
- * 文字养花桌宠 v2.5 - 垂直布局 & 移动端优化
+ * 文字养花桌宠 v2.9 - 终极移动端交互修复
  */
 
-/* 主容器：改为水平flex布局 */
+/* 主容器：本身不可交互 */
 #flower-pet-container {
     position: fixed;
     z-index: 1000;
-    width: auto; /* 宽度自适应 */
+    width: auto;
     padding: 10px;
     background: rgba(255, 255, 255, 0.01);
     border: none;
     box-shadow: none;
     display: flex;
-    flex-direction: row; /* 核心：改为水平排列 */
-    align-items: center; /* 垂直居中对齐 */
-    gap: 10px;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
     user-select: none;
-    cursor: grab;
+    cursor: default; /* 容器默认光标，不可拖动 */
     transition: transform 0.2s ease;
 }
 
-#flower-pet-container:active {
-    cursor: grabbing;
-    transform: scale(0.95);
-}
+/* 交互按钮区域 */
+#flower-pet-actions { display: none; flex-direction: column; justify-content: center; gap: 8px; }
+#flower-pet-actions.visible { display: flex; }
+#flower-pet-actions button { font-size: 24px; background: transparent; border: none; border-radius: 50%; width: 36px; height: 36px; cursor: pointer; transition: all 0.2s ease; display: flex; justify-content: center; align-items: center; text-shadow: 0px 0px 8px rgba(0, 0, 0, 0.6); }
+.icon-activated { animation: icon-pop 0.5s ease-in-out; }
+@keyframes icon-pop { 0% { transform: scale(1); } 50% { transform: scale(1.4) rotate(-15deg); } 100% { transform: scale(1) rotate(0deg); } }
+#flower-pet-actions button:hover:not(:disabled) { transform: scale(1.2); }
+#flower-pet-actions button:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(80%); }
 
-/* 交互按钮区域：改为垂直flex布局 */
-#flower-pet-actions {
-    display: none;
-    flex-direction: column; /* 核心：改为垂直排列 */
-    justify-content: center;
-    gap: 8px; /* 按钮间距 */
-}
+/* 植物展示区 */
+#flower-pet-display-wrapper { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 130px; position: relative; }
 
-#flower-pet-actions.visible {
-    display: flex;
-}
-
-#flower-pet-actions button {
-    font-size: 24px; /* 调整图标大小以适应新布局 */
-    background: transparent;
-    border: none;
-    border-radius: 50%;
-    width: 36px;
-    height: 36px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    text-shadow: 0px 0px 8px rgba(0, 0, 0, 0.6);
-}
-
-#flower-pet-actions button:hover:not(:disabled) {
-    transform: scale(1.2);
-}
-
-#flower-pet-actions button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    filter: grayscale(80%);
-}
-
-/* 植物展示区：包含植物和进度条 */
-#flower-pet-display-wrapper {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    width: 130px; /* 给一个固定宽度 */
-}
-
+/* 植物图片区域：这是唯一的拖动和点击区域 */
 #flower-pet-display {
     width: 100%;
     height: 80px;
-    background-color: transparent;
+    cursor: grab; /* 明确告诉用户这里可以拖动 */
     display: flex;
     justify-content: center;
     align-items: center;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
 }
+#flower-pet-display:active { cursor: grabbing; } /* 按下时变为抓取手势 */
 
-#flower-pet-stage {
-    font-size: 64px;
-    line-height: 1;
-    filter: none;
-    text-shadow: 
-        0px 0px 5px rgba(0, 0, 0, 0.5), 
-        0px 0px 10px rgba(0, 0, 0, 0.3);
-    transition: transform 0.3s ease;
-}
+#flower-pet-stage { font-size: 64px; line-height: 1; filter: none; text-shadow: 0px 0px 5px rgba(0, 0, 0, 0.5), 0px 0px 10px rgba(0, 0, 0, 0.3); transition: transform 0.3s ease; }
+#flower-pet-bug { position: absolute; top: 8px; right: 8px; font-size: 24px; text-shadow: 0px 0px 8px rgba(0, 0, 0, 0.7); animation: bug-wiggle 0.5s infinite; cursor: pointer; }
+@keyframes bug-wiggle { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
 
-#flower-pet-bug {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    font-size: 24px;
-    text-shadow: 0px 0px 8px rgba(0, 0, 0, 0.7);
-    animation: bug-wiggle 0.5s infinite;
-    cursor: pointer;
-}
+/* 进度条 */
+#flower-pet-progress-bar { display: none; width: 80%; margin: 0 auto; height: 6px; background-color: rgba(0, 0, 0, 0.2); border-radius: 3px; overflow: hidden; }
+#flower-pet-progress-bar.visible-extra { display: block; }
+#flower-pet-progress-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 0.5s ease-in-out; background: linear-gradient(to right, #69f0ae, #80d8ff, #f48fb1); }
 
-@keyframes bug-wiggle {
-    0%, 100% { transform: rotate(-5deg); }
-    50% { transform: rotate(5deg); }
-}
-
-#flower-pet-progress-bar {
-    width: 100%; /* 宽度占满wrapper */
-    height: 6px;
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-#flower-pet-progress-fill {
-    height: 100%;
-    width: 0%;
-    border-radius: 3px;
-    transition: width 0.5s ease-in-out;
-    background: linear-gradient(to right, #69f0ae, #80d8ff, #f48fb1);
-}
+/* 头顶气泡 */
+.bubble-tooltip { position: absolute; top: -15px; left: 50%; background: white; color: #333; padding: 6px 12px; border-radius: 12px; font-size: 14px; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.2); white-space: nowrap; animation: bubble-fade-in-out 2.5s ease-in-out forwards; pointer-events: none; }
+.bubble-tooltip::after { content: ''; position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); border-width: 8px 8px 0; border-style: solid; border-color: white transparent transparent transparent; }
+@keyframes bubble-fade-in-out { 0% { opacity: 0; transform: translate(-50%, 10px); } 10% { opacity: 1; transform: translate(-50%, 0); } 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -10px); } }
 
 /* 浮动动画 */
-.floating-animation {
-    position: absolute;
-    font-size: 20px;
-    font-weight: bold;
-    color: white;
-    text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.8);
-    pointer-events: none;
-    animation: float-up 1.5s ease-out forwards;
-}
+.floating-animation { position: absolute; font-size: 20px; font-weight: bold; color: white; text-shadow: 0px 2px 4px rgba(0, 0, 0, 0.8); pointer-events: none; animation: float-up 1.5s ease-out forwards; }
+@keyframes float-up { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-60px) scale(1.2); } }
 
-@keyframes float-up {
-    0% { opacity: 1; transform: translateY(0) scale(1); }
-    100% { opacity: 0; transform: translateY(-60px) scale(1.2); }
-}
+/* 移动端响应式：缩小为60% */
+@media (max-width: 768px) { #flower-pet-container { transform-origin: bottom right; transform: scale(0.6); } }
 
-/* --- 移动端响应式 --- */
-@media (max-width: 768px) {
-    #flower-pet-container {
-        /* 从右下角为基点进行缩放 */
-        transform-origin: bottom right;
-        transform: scale(0.8);
-    }
-}
-
-
-/* --- 设置菜单样式 (不变) --- */
-.status-box {
-    border: 1px solid var(--border-color, #ccc);
-    border-radius: 8px;
-    padding: 10px;
-    margin-top: 15px;
-    background-color: var(--background-color, #f9f9f9);
-}
-
-.status-box h4 {
-    margin-top: 0;
-    margin-bottom: 10px;
-    text-align: center;
-    font-weight: bold;
-}
-
-.status-line {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
-}
-
-.status-line span:first-child {
-    font-weight: 500;
-    color: var(--text-color-secondary, #555);
-}
-
-.status-line span:last-child {
-    font-weight: bold;
-}
+/* 设置菜单样式 */
+.status-box { border: 1px solid var(--border-color, #ccc); border-radius: 8px; padding: 10px; margin-top: 15px; background-color: var(--background-color, #f9f9f9); }
+.status-box h4 { margin-top: 0; margin-bottom: 10px; text-align: center; font-weight: bold; }
+.status-line { display: flex; justify-content: space-between; margin-bottom: 5px; }
+.status-line span:first-child { font-weight: 500; color: var(--text-color-secondary, #555); }
+.status-line span:last-child { font-weight: bold; }```
