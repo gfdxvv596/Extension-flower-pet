@@ -1,3 +1,4 @@
+/* --- 基础和桌面样式 --- */
 #flower-pet-container {
     position: fixed;
     bottom: 20px;
@@ -19,29 +20,28 @@
     width: fit-content;
     min-width: 140px;
     user-select: none;
-    transition: all 0.3s ease-in-out;
+    overflow: visible; /* 桌面端允许按钮溢出 */
+    
+    /* 平滑过渡效果 */
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-#flower-pet-container:hover {
+#flower-pet-container:not(.flower-pet-mobile):hover {
     transform: translateY(-5px) scale(1.02);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 
-/* 移动端适配：将桌宠上移，避免遮挡输入框 */
-#flower-pet-container.flower-pet-mobile {
-    bottom: 80px;
-    right: 10px;
-    transform: scale(0.9);
-}
-
+/* 植物/图标 */
 #flower-pet-stage {
     font-size: 48px;
     line-height: 1;
     filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.1));
     margin-bottom: 5px;
     cursor: default;
+    transition: font-size 0.35s ease;
 }
 
+/* 成长点数 */
 #flower-pet-points {
     font-size: 12px;
     color: #555;
@@ -49,77 +49,85 @@
     background-color: rgba(0,0,0,0.05);
     padding: 2px 6px;
     border-radius: 6px;
+    transition: opacity 0.2s ease;
 }
 
 /* 交互按钮区域 */
 #flower-pet-actions {
     position: absolute;
-    top: -15px; /* 悬浮在主容器上方 */
+    top: -15px;
     display: flex;
     gap: 8px;
     background: white;
     padding: 5px 10px;
     border-radius: 20px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    opacity: 0;
     transition: opacity 0.2s ease, transform 0.2s ease;
+    opacity: 0;
     transform: translateY(10px);
 }
 
-#flower-pet-container:hover #flower-pet-actions {
+#flower-pet-container:hover #flower-pet-actions,
+#flower-pet-container.flower-pet-expanded #flower-pet-actions {
     opacity: 1;
     transform: translateY(0);
 }
 
-.flower-action-button {
-    font-size: 16px;
-    color: #666;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    padding: 5px;
-}
-.flower-action-button:hover {
-    color: #000;
-    transform: scale(1.2);
-}
-.flower-action-button.disabled {
-    color: #ccc;
-    cursor: not-allowed;
-    pointer-events: none;
-}
-#flower-action-bug {
-    color: #d9534f;
-}
+.flower-action-button { /* ... 省略无变化样式 ... */ font-size: 16px; color: #666; cursor: pointer; transition: all 0.2s ease; padding: 5px; }
+.flower-action-button:hover { color: #000; transform: scale(1.2); }
+.flower-action-button.disabled { color: #ccc; cursor: not-allowed; pointer-events: none; }
+#flower-action-bug { color: #d9534f; }
 
 /* 反馈动画 */
-.flower-feedback {
-    position: absolute;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 20px;
-    font-weight: bold;
-    color: #4CAF50;
-    animation: feedback-animation 1s ease-out forwards;
-    pointer-events: none;
+.flower-feedback { /* ... 省略无变化样式 ... */ position: absolute; top: 20px; left: 50%; transform: translateX(-50%); font-size: 20px; font-weight: bold; color: #4CAF50; animation: feedback-animation 1s ease-out forwards; pointer-events: none; }
+@keyframes feedback-animation { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -50px); } }
+
+/* --- 移动端悬浮球样式 --- */
+#flower-pet-container.flower-pet-mobile {
+    /* 变成一个圆球 */
+    bottom: 70px; /* 上移以避开手机导航栏 */
+    right: 15px;
+    width: 60px;
+    height: 60px;
+    min-width: 60px;
+    border-radius: 50%;
+    padding: 0;
+    overflow: hidden; /* 隐藏内部所有内容，直到展开 */
+    cursor: pointer;
 }
 
-@keyframes feedback-animation {
-    0% {
-        opacity: 1;
-        transform: translate(-50%, 0);
-    }
-    100% {
-        opacity: 0;
-        transform: translate(-50%, -50px);
-    }
+/* 移动端，球内的图标 */
+#flower-pet-container.flower-pet-mobile #flower-pet-stage {
+    font-size: 32px; /* 调整图标大小以适应球体 */
+    margin: 0;
 }
 
-
-/* 扩展设置UI微调 */
-.settings_block {
-    margin-top: 10px;
-    margin-bottom: 10px;
+/* 移动端，默认隐藏点数和动作按钮 */
+#flower-pet-container.flower-pet-mobile #flower-pet-points,
+#flower-pet-container.flower-pet-mobile #flower-pet-actions {
+    opacity: 0;
+    pointer-events: none; /* 隐藏时不可交互 */
 }
+
+/* --- 移动端展开后的卡片样式 --- */
+#flower-pet-container.flower-pet-mobile.flower-pet-expanded {
+    /* 变回卡片 */
+    width: fit-content;
+    height: auto;
+    min-width: 140px;
+    border-radius: 16px;
+    padding: 10px;
+    cursor: default;
+}
+
+/* 移动端展开后，恢复点数和动作按钮的显示 */
+#flower-pet-container.flower-pet-mobile.flower-pet-expanded #flower-pet-points,
+#flower-pet-container.flower-pet-mobile.flower-pet-expanded #flower-pet-actions {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* --- 设置UI (无变化) --- */
+.settings_block { margin-top: 10px; margin-bottom: 10px; }
 #flowerPetReset { padding: 5px 10px; }
 .button_label { margin-left: 0.5rem; align-self: center; }
