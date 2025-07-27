@@ -1,5 +1,5 @@
 import {
-    name2, // 导入角色名
+    name2,
     eventSource,
     event_types,
     saveSettingsDebounced,
@@ -11,8 +11,8 @@ const MODULE = 'flower_pet';
 
 // --- 配置和常量 ---
 const LONG_PRESS_DURATION = 300;
-const WATER_COOLDOWN = 15 * 60 * 1000; // 15分钟
-const FERTILIZE_COOLDOWN = 15 * 60 * 1000; // 15分钟
+const WATER_COOLDOWN = 15 * 60 * 1000;
+const SUNLIGHT_COOLDOWN = 15 * 60 * 1000; // 更名为SUNLIGHT
 const BUG_CHANCE = 0.05;
 
 const SEED_SERIES = {
@@ -28,14 +28,17 @@ const defaultSettings = {
     coParent: false,
     hasBug: false,
     lastWatered: 0,
-    lastFertilized: 0,
+    lastSunlight: 0, // 更名为lastSunlight
     position: { top: null, left: null },
 };
 
 // --- 状态和DOM引用 ---
 let isDragging = false, pressTimer = null, offsetX, offsetY;
 let petContainer, stageDisplay, bugDisplay, progressFill, actionsContainer;
-let waterButton, fertilizeButton, bugButton;
+let waterButton, sunlightButton, bugButton;
+// 流畅拖动所需的变量
+let dragPosition = { x: 0, y: 0 };
+let animationFrameId = null;
 
 // --- 核心函数 ---
 
@@ -43,13 +46,74 @@ function getSettings() {
     if (extension_settings[MODULE] === undefined) {
         extension_settings[MODULE] = structuredClone(defaultSettings);
     }
+    // 兼容旧的 lastFertilized
+    if (extension_settings[MODULE].lastFertilized) {
+        extension_settings[MODULE].lastSunlight = extension_settings[MODULE].lastFertilized;
+        delete extension_settings[MODULE].lastFertilized;
+    }
     Object.assign(extension_settings[MODULE], { ...defaultSettings, ...extension_settings[MODULE] });
     return extension_settings[MODULE];
 }
 
-function handlePressStart(e) { e.preventDefault(); clearTimeout(pressTimer); pressTimer = setTimeout(() => { isDragging = true; const petRect = petContainer.getBoundingClientRect(); const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX; const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY; offsetX = clientX - petRect.left; offsetY = clientY - petRect.top; petContainer.style.cursor = 'grabbing'; }, LONG_PRESS_DURATION); }
-function handlePressMove(e) { if (!isDragging) return; e.preventDefault(); const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX; const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY; let newLeft = clientX - offsetX; let newTop = clientY - offsetY; const maxLeft = window.innerWidth - petContainer.offsetWidth; const maxTop = window.innerHeight - petContainer.offsetHeight; newLeft = Math.max(0, Math.min(newLeft, maxLeft)); newTop = Math.max(0, Math.min(newTop, maxTop)); petContainer.style.left = `${newLeft}px`; petContainer.style.top = `${newTop}px`; }
-function handlePressEnd() { clearTimeout(pressTimer); if (isDragging) { isDragging = false; petContainer.style.cursor = 'grab'; const settings = getSettings(); settings.position.left = parseInt(petContainer.style.left, 10); settings.position.top = parseInt(petContainer.style.top, 10); saveSettingsDebounced(); } else { toggleActionsMenu(); } }
+// 优化后的拖动逻辑
+function dragLoop() {
+    if (!isDragging) {
+        animationFrameId = null;
+        return;
+    }
+    petContainer.style.left = `${dragPosition.x}px`;
+    petContainer.style.top = `${dragPosition.y}px`;
+    animationFrameId = requestAnimationFrame(dragLoop);
+}
+
+function handlePressStart(e) {
+    e.preventDefault();
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+        isDragging = true;
+        const petRect = petContainer.getBoundingClientRect();
+        const clientX = e.type === 'touchstart' ? e.touches[0].clientX : e.clientX;
+        const clientY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+        offsetX = clientX - petRect.left;
+        offsetY = clientY - petRect.top;
+        petContainer.style.cursor = 'grabbing';
+
+        // 启动动画循环
+        if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(dragLoop);
+        }
+    }, LONG_PRESS_DURATION);
+}
+
+function handlePressMove(e) {
+    if (!isDragging) return;
+    e.preventDefault();
+    const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
+    const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+    
+    // 只更新坐标，不直接操作DOM
+    let newLeft = clientX - offsetX;
+    let newTop = clientY - offsetY;
+    const maxLeft = window.innerWidth - petContainer.offsetWidth;
+    const maxTop = window.innerHeight - petContainer.offsetHeight;
+    dragPosition.x = Math.max(0, Math.min(newLeft, maxLeft));
+    dragPosition.y = Math.max(0, Math.min(newTop, maxTop));
+}
+
+function handlePressEnd() {
+    clearTimeout(pressTimer);
+    if (isDragging) {
+        isDragging = false; // 动画循环将在下一帧停止
+        petContainer.style.cursor = 'grab';
+        const settings = getSettings();
+        settings.position.left = dragPosition.x;
+        settings.position.top = dragPosition.y;
+        saveSettingsDebounced();
+    } else {
+        toggleActionsMenu();
+    }
+}
+
 function toggleActionsMenu() { actionsContainer.classList.toggle('visible'); }
 function showFloatingAnimation(text) { const animation = document.createElement('div'); animation.className = 'floating-animation'; animation.textContent = text; petContainer.appendChild(animation); setTimeout(() => animation.remove(), 1500); }
 
@@ -64,14 +128,14 @@ function waterPlant() {
     }
 }
 
-function fertilizePlant() {
+function giveSunlight() { // 更名为giveSunlight
     const settings = getSettings();
     const now = Date.now();
-    if ((now - settings.lastFertilized) < FERTILIZE_COOLDOWN) {
+    if ((now - settings.lastSunlight) < SUNLIGHT_COOLDOWN) {
         showFloatingAnimation(`🚫 ${t`On Cooldown`}`);
     } else {
-        settings.lastFertilized = now;
-        addGrowthPoints(5, 'fertilize');
+        settings.lastSunlight = now;
+        addGrowthPoints(5, 'sunlight');
     }
 }
 
@@ -84,7 +148,7 @@ function addGrowthPoints(points, reason = 'chat') {
     updatePetUI();
     updateSettingsUI();
     saveSettingsDebounced();
-    let icon = reason === 'water' ? '💧' : reason === 'fertilize' ? '✨' : reason === 'bug' ? '✔️' : '💬';
+    let icon = reason === 'water' ? '💧' : reason === 'sunlight' ? '☀️' : reason === 'bug' ? '✔️' : '💬';
     showFloatingAnimation(`+${points} ${icon}`);
 }
 
@@ -94,13 +158,14 @@ function resetPlant() {
     settings.growthPoints = 0;
     settings.hasBug = false;
     settings.lastWatered = 0;
-    settings.lastFertilized = 0;
+    settings.lastSunlight = 0; // 更名
     saveSettingsDebounced();
     updatePetUI();
     updateSettingsUI();
 }
 
 function updateSettingsUI() {
+    // ... (此函数内容不变)
     const settings = getSettings();
     const statusStage = document.getElementById('flower-pet-status-stage');
     const statusGrowth = document.getElementById('flower-pet-status-growth');
@@ -113,6 +178,7 @@ function updateSettingsUI() {
 }
 
 function addExtensionSettings(settings) {
+    // ... (此函数内容不变)
     const settingsContainer = document.getElementById('extensions_settings');
     if (!settingsContainer) return;
     const inlineDrawer = document.createElement('div');
@@ -142,7 +208,7 @@ function addExtensionSettings(settings) {
     const seedSelect = document.createElement('select');
     seedSelect.classList.add('text_pole');
     for (const key in SEED_SERIES) { const option = document.createElement('option'); option.value = key; option.textContent = SEED_SERIES[key].name; if (key === settings.seedType) option.selected = true; seedSelect.append(option); }
-    seedSelect.addEventListener('change', () => { if (confirm(t`Resetting will start your progress over with a new plant. Are you sure?`)) { settings.seedType = seedSelect.value; settings.growthPoints = 0; settings.hasBug = false; settings.lastWatered = 0; settings.lastFertilized = 0; saveSettingsDebounced(); updatePetUI(); updateSettingsUI(); } else { seedSelect.value = settings.seedType; } });
+    seedSelect.addEventListener('change', () => { if (confirm(t`Resetting will start your progress over with a new plant. Are you sure?`)) { settings.seedType = seedSelect.value; settings.growthPoints = 0; settings.hasBug = false; settings.lastWatered = 0; settings.lastSunlight = 0; saveSettingsDebounced(); updatePetUI(); updateSettingsUI(); } else { seedSelect.value = settings.seedType; } });
     seedSelectorDiv.append(seedLabel, seedSelect);
     const statusDiv = document.createElement('div');
     statusDiv.classList.add('status-box');
@@ -164,11 +230,29 @@ function createPetUI() {
     if (document.getElementById('flower-pet-container')) return;
     petContainer = document.createElement('div');
     petContainer.id = 'flower-pet-container';
-    petContainer.innerHTML = `<div id="flower-pet-display"><div id="flower-pet-stage"></div><div id="flower-pet-bug" style="display: none;">🐞</div></div><div id="flower-pet-progress-bar"><div id="flower-pet-progress-fill"></div></div><div id="flower-pet-actions"><button id="flower-pet-water" title="${t`Water`}">${'💧'}</button><button id="flower-pet-fertilize" title="${t`Fertilize`}">${'✨'}</button><button id="flower-pet-bug-action" title="${t`Catch Bug`}">${'🥅'}</button></div>`;
+    // 更新HTML结构以适应新布局
+    petContainer.innerHTML = `
+        <div id="flower-pet-actions">
+            <button id="flower-pet-water" title="${t`Water`}">${'💧'}</button>
+            <button id="flower-pet-sunlight" title="${t`Sunlight`}">${'☀️'}</button>
+            <button id="flower-pet-bug-action" title="${t`Catch Bug`}">${'🥅'}</button>
+        </div>
+        <div id="flower-pet-display-wrapper">
+            <div id="flower-pet-display">
+                <div id="flower-pet-stage"></div>
+                <div id="flower-pet-bug" style="display: none;">🐞</div>
+            </div>
+            <div id="flower-pet-progress-bar"><div id="flower-pet-progress-fill"></div></div>
+        </div>
+    `;
     document.body.appendChild(petContainer);
-    stageDisplay = document.getElementById('flower-pet-stage'); bugDisplay = document.getElementById('flower-pet-bug'); progressFill = document.getElementById('flower-pet-progress-fill'); actionsContainer = document.getElementById('flower-pet-actions'); waterButton = document.getElementById('flower-pet-water'); fertilizeButton = document.getElementById('flower-pet-fertilize'); bugButton = document.getElementById('flower-pet-bug-action');
+    
+    // 获取DOM引用
+    stageDisplay = document.getElementById('flower-pet-stage'); bugDisplay = document.getElementById('flower-pet-bug'); progressFill = document.getElementById('flower-pet-progress-fill'); actionsContainer = document.getElementById('flower-pet-actions'); waterButton = document.getElementById('flower-pet-water'); sunlightButton = document.getElementById('flower-pet-sunlight'); bugButton = document.getElementById('flower-pet-bug-action');
+    
+    // 绑定事件
     petContainer.addEventListener('mousedown', handlePressStart); document.addEventListener('mousemove', handlePressMove); document.addEventListener('mouseup', handlePressEnd); petContainer.addEventListener('touchstart', handlePressStart, { passive: false }); document.addEventListener('touchmove', handlePressMove, { passive: false }); document.addEventListener('touchend', handlePressEnd);
-    waterButton.addEventListener('click', waterPlant); fertilizeButton.addEventListener('click', fertilizePlant); bugButton.addEventListener('click', catchBug);
+    waterButton.addEventListener('click', waterPlant); sunlightButton.addEventListener('click', giveSunlight); bugButton.addEventListener('click', catchBug);
 }
 
 function updatePetUI() {
@@ -188,8 +272,18 @@ function updatePetUI() {
     stageDisplay.style.transform = settings.hasBug ? 'rotate(-5deg)' : 'rotate(0deg)';
     const now = Date.now();
     waterButton.disabled = (now - settings.lastWatered) < WATER_COOLDOWN;
-    fertilizeButton.disabled = (now - settings.lastFertilized) < FERTILIZE_COOLDOWN;
-    if (settings.position.top !== null) { petContainer.style.top = `${settings.position.top}px`; petContainer.style.left = `${settings.position.left}px`; } else { setTimeout(() => { const margin = 20; try { petContainer.style.top = `${window.innerHeight - petContainer.offsetHeight - margin}px`; petContainer.style.left = `${window.innerWidth - petContainer.offsetWidth - margin}px`; } catch(e) {} }, 0); }
+    sunlightButton.disabled = (now - settings.lastSunlight) < SUNLIGHT_COOLDOWN; // 更名
+    
+    // 应用位置
+    if (settings.position.top !== null && !isDragging) {
+        petContainer.style.top = `${settings.position.top}px`;
+        petContainer.style.left = `${settings.position.left}px`;
+    } else if (settings.position.top === null) {
+        setTimeout(() => {
+            if (isDragging) return; // 如果正在拖动，则不重置位置
+            const margin = 20; try { petContainer.style.top = `${window.innerHeight - petContainer.offsetHeight - margin}px`; petContainer.style.left = `${window.innerWidth - petContainer.offsetWidth - margin}px`; } catch(e) {}
+        }, 0);
+    }
 }
 
 function onMessage() {
