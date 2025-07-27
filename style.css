@@ -1,0 +1,125 @@
+#flower-pet-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    background-color: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    
+    padding: 10px;
+    width: fit-content;
+    min-width: 140px;
+    user-select: none;
+    transition: all 0.3s ease-in-out;
+}
+
+#flower-pet-container:hover {
+    transform: translateY(-5px) scale(1.02);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* 移动端适配：将桌宠上移，避免遮挡输入框 */
+#flower-pet-container.flower-pet-mobile {
+    bottom: 80px;
+    right: 10px;
+    transform: scale(0.9);
+}
+
+#flower-pet-stage {
+    font-size: 48px;
+    line-height: 1;
+    filter: drop-shadow(2px 2px 3px rgba(0,0,0,0.1));
+    margin-bottom: 5px;
+    cursor: default;
+}
+
+#flower-pet-points {
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
+    background-color: rgba(0,0,0,0.05);
+    padding: 2px 6px;
+    border-radius: 6px;
+}
+
+/* 交互按钮区域 */
+#flower-pet-actions {
+    position: absolute;
+    top: -15px; /* 悬浮在主容器上方 */
+    display: flex;
+    gap: 8px;
+    background: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform: translateY(10px);
+}
+
+#flower-pet-container:hover #flower-pet-actions {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.flower-action-button {
+    font-size: 16px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 5px;
+}
+.flower-action-button:hover {
+    color: #000;
+    transform: scale(1.2);
+}
+.flower-action-button.disabled {
+    color: #ccc;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+#flower-action-bug {
+    color: #d9534f;
+}
+
+/* 反馈动画 */
+.flower-feedback {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 20px;
+    font-weight: bold;
+    color: #4CAF50;
+    animation: feedback-animation 1s ease-out forwards;
+    pointer-events: none;
+}
+
+@keyframes feedback-animation {
+    0% {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50px);
+    }
+}
+
+
+/* 扩展设置UI微调 */
+.settings_block {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+#flowerPetReset { padding: 5px 10px; }
+.button_label { margin-left: 0.5rem; align-self: center; }

@@ -1,0 +1,15 @@
+{
+    "display_name": "ÎÄ×ÖÑø»¨×À³è (Desktop Flower Pet)",
+    "loading_order": 800,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Gemini",
+    "version": "1.0.0",
+    "homePage": "",
+    "auto_update": false,
+    "i18n": {
+        "zh-cn": "i18n/zh-cn.json"
+    }
+}
