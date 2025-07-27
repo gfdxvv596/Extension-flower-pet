@@ -11,7 +11,7 @@ const MODULE = 'flower_pet';
 
 // --- 配置和常量 ---
 const TAP_MAX_DURATION = 250; // ms
-const TAP_MAX_DISTANCE = 10; // px, a small tolerance for accidental movement
+const TAP_MAX_DISTANCE = 10; // px
 const WATER_COOLDOWN = 15 * 60 * 1000;
 const SUNLIGHT_COOLDOWN = 15 * 60 * 1000;
 const BUG_CHANCE = 0.05;
@@ -28,7 +28,6 @@ let waterButton, sunlightButton, bugButton;
 let animationFrameId = null;
 
 // --- 核心函数 ---
-
 function getSettings() { if (extension_settings[MODULE] === undefined) { extension_settings[MODULE] = structuredClone(defaultSettings); } if (extension_settings[MODULE].lastFertilized) { extension_settings[MODULE].lastSunlight = extension_settings[MODULE].lastFertilized; delete extension_settings[MODULE].lastFertilized; } Object.assign(extension_settings[MODULE], { ...defaultSettings, ...extension_settings[MODULE] }); return extension_settings[MODULE]; }
 function showFloatingAnimation(text) { const animation = document.createElement('div'); animation.className = 'floating-animation'; animation.textContent = text; petContainer.appendChild(animation); setTimeout(() => animation.remove(), 1500); }
 function showBubbleMessage(message) { const bubble = document.createElement('div'); bubble.className = 'bubble-tooltip'; bubble.textContent = message; displayWrapper.appendChild(bubble); setTimeout(() => bubble.remove(), 2500); }
@@ -36,76 +35,10 @@ function toggleActionsMenu() { actionsContainer.classList.toggle('visible'); pro
 function triggerIconAnimation(buttonElement) { buttonElement.classList.add('icon-activated'); setTimeout(() => buttonElement.classList.remove('icon-activated'), 500); }
 function formatTime(ms) { const totalSeconds = Math.floor(ms / 1000); const minutes = Math.floor(totalSeconds / 60); const seconds = totalSeconds % 60; return `${minutes}m ${seconds}s`; }
 
-// --- 全新、健壮的事件处理模型 ---
-function handlePressStart(e) {
-    isPressing = true;
-    isDragging = false;
-    pressStartTime = Date.now();
-    const touch = e.type === 'touchstart' ? e.touches[0] : e;
-    pressStartPos = { x: touch.clientX, y: touch.clientY };
-    const rect = petContainer.getBoundingClientRect();
-    // 记录元素在按下时的真实top/left，这是计算的基础
-    startPetPos = { x: rect.left, y: rect.top };
-    // 立即停止任何可能正在进行的动画，以获得即时响应
-    if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-        animationFrameId = null;
-    }
-}
-
-function handlePressMove(e) {
-    if (!isPressing) return;
-    const touch = e.type === 'touchmove' ? e.touches[0] : e;
-    const currentPos = { x: touch.clientX, y: touch.clientY };
-    const distance = Math.hypot(currentPos.x - pressStartPos.x, currentPos.y - pressStartPos.y);
-
-    if (!isDragging && distance > TAP_MAX_DISTANCE) {
-        isDragging = true;
-    }
-    
-    if (isDragging) {
-        // 使用requestAnimationFrame来平滑更新，避免性能问题
-        if (!animationFrameId) {
-            animationFrameId = requestAnimationFrame(() => {
-                const scale = window.matchMedia("(max-width: 768px)").matches ? 0.6 : 1;
-                // 计算手指滑动的真实距离（delta）
-                const deltaX = currentPos.x - pressStartPos.x;
-                const deltaY = currentPos.y - pressStartPos.y;
-
-                // **核心修复**：将delta除以当前的缩放比例，得到CSS中应移动的距离
-                const newX = startPetPos.x + (deltaX / scale);
-                const newY = startPetPos.y + (deltaY / scale);
-                
-                // **核心修复**：边界检测使用元素的未缩放尺寸和屏幕尺寸
-                const maxLeft = window.innerWidth - petContainer.offsetWidth;
-                const maxTop = window.innerHeight - petContainer.offsetHeight;
-
-                petContainer.style.left = `${Math.max(0, Math.min(newX, maxLeft))}px`;
-                petContainer.style.top = `${Math.max(0, Math.min(newY, maxTop))}px`;
-                animationFrameId = null; // 允许下一帧请求
-            });
-        }
-    }
-}
-
-function handlePressEnd(e) {
-    if (!isPressing) return;
-    const pressDuration = Date.now() - pressStartTime;
-    // 即使isDragging为true，如果持续时间很短，也可能是意外的微小移动，仍视为点击
-    if (isDragging && pressDuration > TAP_MAX_DURATION) {
-        const settings = getSettings();
-        const finalRect = petContainer.getBoundingClientRect();
-        const scale = window.matchMedia("(max-width: 768px)").matches ? 0.6 : 1;
-        settings.position.left = finalRect.left / scale;
-        settings.position.top = finalRect.top / scale;
-        saveSettingsDebounced();
-    } else {
-        // 如果不是拖动，或者拖动时间很短，则视为点击
-        toggleActionsMenu();
-    }
-    isPressing = false;
-    isDragging = false;
-}
+// --- 健壮的事件处理模型 ---
+function handlePressStart(e) { isPressing = true; isDragging = false; pressStartTime = Date.now(); const touch = e.type === 'touchstart' ? e.touches[0] : e; pressStartPos = { x: touch.clientX, y: touch.clientY }; const rect = petContainer.getBoundingClientRect(); startPetPos = { x: rect.left, y: rect.top }; if (animationFrameId) { cancelAnimationFrame(animationFrameId); animationFrameId = null; } }
+function handlePressMove(e) { if (!isPressing) return; const touch = e.type === 'touchmove' ? e.touches[0] : e; const currentPos = { x: touch.clientX, y: touch.clientY }; const distance = Math.hypot(currentPos.x - pressStartPos.x, currentPos.y - pressStartPos.y); if (!isDragging && distance > TAP_MAX_DISTANCE) { isDragging = true; } if (isDragging) { if (!animationFrameId) { animationFrameId = requestAnimationFrame(() => { const scale = window.matchMedia("(max-width: 768px)").matches ? 0.6 : 1; const deltaX = currentPos.x - pressStartPos.x; const deltaY = currentPos.y - pressStartPos.y; const newX = startPetPos.x + (deltaX / scale); const newY = startPetPos.y + (deltaY / scale); const maxLeft = window.innerWidth - petContainer.offsetWidth; const maxTop = window.innerHeight - petContainer.offsetHeight; petContainer.style.left = `${Math.max(0, Math.min(newX, maxLeft))}px`; petContainer.style.top = `${Math.max(0, Math.min(newY, maxTop))}px`; animationFrameId = null; }); } } }
+function handlePressEnd() { if (!isPressing) return; const pressDuration = Date.now() - pressStartTime; if (isDragging && pressDuration > TAP_MAX_DURATION) { const settings = getSettings(); const finalRect = petContainer.getBoundingClientRect(); const scale = window.matchMedia("(max-width: 768px)").matches ? 0.6 : 1; settings.position.left = finalRect.left / scale; settings.position.top = finalRect.top / scale; saveSettingsDebounced(); } else { toggleActionsMenu(); } isPressing = false; isDragging = false; }
 
 function waterPlant() { const settings = getSettings(); const now = Date.now(); if ((now - settings.lastWatered) < WATER_COOLDOWN) { showBubbleMessage(`💧 ${t`I'm full!`}`); } else { settings.lastWatered = now; addGrowthPoints(5); showFloatingAnimation(`${t`Watered!`} 💧`); triggerIconAnimation(waterButton); } }
 function giveSunlight() { const settings = getSettings(); const now = Date.now(); if ((now - settings.lastSunlight) < SUNLIGHT_COOLDOWN) { showBubbleMessage(`☀️ ${t`Too much sun!`}`); } else { settings.lastSunlight = now; addGrowthPoints(5); showFloatingAnimation(`${t`Sunlight!`} ☀️`); triggerIconAnimation(sunlightButton); } }
@@ -129,7 +62,40 @@ function createPetUI() {
     waterButton.addEventListener('click', waterPlant); sunlightButton.addEventListener('click', giveSunlight); bugButton.addEventListener('click', catchBug);
 }
 
-function updatePetUI() { const settings = getSettings(); if (!petContainer) return; petContainer.style.display = settings.enabled ? 'flex' : 'none'; if (!settings.enabled) return; petContainer.title = settings.coParent ? t`Nurture with {name2}`.replace('{name2}', name2) : t`Your little flower that grows as you chat.`; const series = SEED_SERIES[settings.seedType] || SEED_SERIES.flowers; let currentStage = series.stages[0], nextStage = series.stages[1] || currentStage; for (let i = series.stages.length - 1; i >= 0; i--) { if (settings.growthPoints >= series.stages[i].threshold) { currentStage = series.stages[i]; nextStage = series.stages[i + 1] || currentStage; break; } } stageDisplay.textContent = currentStage.visual; const progress = (settings.growthPoints - currentStage.threshold) / (nextStage.threshold - currentStage.threshold || 1); progressFill.style.width = `${Math.min(100, progress * 100)}%`; bugDisplay.style.display = settings.hasBug ? 'block' : 'none'; bugButton.style.display = settings.hasBug ? 'flex' : 'none'; stageDisplay.style.transform = settings.hasBug ? 'rotate(-5deg)' : 'rotate(0deg)'; const now = Date.now(); const waterCooldownRemaining = WATER_COOLDOWN - (now - settings.lastWatered); if (waterCooldownRemaining > 0) { waterButton.disabled = true; waterButton.title = t`Cooldown: {time}`.replace('{time}', formatTime(waterCooldownRemaining)); } else { waterButton.disabled = false; waterButton.title = t`Water`; } const sunlightCooldownRemaining = SUNLIGHT_COOLDOWN - (now - settings.lastSunlight); if (sunlightCooldownRemaining > 0) { sunlightButton.disabled = true; sunlightButton.title = t`Cooldown: {time}`.replace('{time}', formatTime(sunlightCooldownRemaining)); } else { sunlightButton.disabled = false; sunlightButton.title = t`Sunlight`; } if (settings.position.top !== null && !isDragging && !isPressing) { petContainer.style.top = `${settings.position.top}px`; petContainer.style.left = `${settings.position.left}px`; } else if (settings.position.top === null) { setTimeout(() => { if (isDragging || isPressing) return; const margin = 20; try { petContainer.style.top = `${window.innerHeight - petContainer.offsetHeight - margin}px`; petContainer.style.left = `${window.innerWidth - petContainer.offsetWidth - margin}px`; } catch(e) {} }, 0); } }
+function updatePetUI() {
+    const settings = getSettings(); if (!petContainer) return; petContainer.style.display = settings.enabled ? 'flex' : 'none'; if (!settings.enabled) return;
+    petContainer.title = settings.coParent ? t`Nurture with {name2}`.replace('{name2}', name2) : t`Your little flower that grows as you chat.`;
+    const series = SEED_SERIES[settings.seedType] || SEED_SERIES.flowers; let currentStage = series.stages[0], nextStage = series.stages[1] || currentStage; for (let i = series.stages.length - 1; i >= 0; i--) { if (settings.growthPoints >= series.stages[i].threshold) { currentStage = series.stages[i]; nextStage = series.stages[i + 1] || currentStage; break; } }
+    stageDisplay.textContent = currentStage.visual; const progress = (settings.growthPoints - currentStage.threshold) / (nextStage.threshold - currentStage.threshold || 1); progressFill.style.width = `${Math.min(100, progress * 100)}%`; bugDisplay.style.display = settings.hasBug ? 'block' : 'none'; bugButton.style.display = settings.hasBug ? 'flex' : 'none'; stageDisplay.style.transform = settings.hasBug ? 'rotate(-5deg)' : 'rotate(0deg)';
+    const now = Date.now();
+    const waterCooldownRemaining = WATER_COOLDOWN - (now - settings.lastWatered); if (waterCooldownRemaining > 0) { waterButton.disabled = true; waterButton.title = t`Cooldown: {time}`.replace('{time}', formatTime(waterCooldownRemaining)); } else { waterButton.disabled = false; waterButton.title = t`Water`; }
+    const sunlightCooldownRemaining = SUNLIGHT_COOLDOWN - (now - settings.lastSunlight); if (sunlightCooldownRemaining > 0) { sunlightButton.disabled = true; sunlightButton.title = t`Cooldown: {time}`.replace('{time}', formatTime(sunlightCooldownRemaining)); } else { sunlightButton.disabled = false; sunlightButton.title = t`Sunlight`; }
+    
+    // 定位逻辑
+    if (settings.position.top !== null && !isDragging && !isPressing) {
+        petContainer.style.top = `${settings.position.top}px`;
+        petContainer.style.left = `${settings.position.left}px`;
+    } else if (settings.position.top === null) {
+        // 首次定位
+        setTimeout(() => {
+            if (isDragging || isPressing || getSettings().position.top !== null) return;
+            const margin = 20;
+            try {
+                // **核心修复**
+                const newLeft = window.innerWidth - petContainer.offsetWidth - margin;
+                const newTop = window.innerHeight - petContainer.offsetHeight - margin;
+                petContainer.style.left = `${newLeft}px`;
+                petContainer.style.top = `${newTop}px`;
+                // 立即将首次计算的位置保存到设置中
+                settings.position.left = newLeft;
+                settings.position.top = newTop;
+            } catch (e) {
+                console.error("Failed to initially place the pet.", e);
+            }
+        }, 0);
+    }
+}
+
 function onMessage() { const settings = getSettings(); if (settings.hasBug) return; addGrowthPoints(1); showFloatingAnimation(`💬 +1`); if (Math.random() < BUG_CHANCE) { settings.hasBug = true; saveSettingsDebounced(); updatePetUI(); showFloatingAnimation(`! 🐞`); } }
 
 (function () {
