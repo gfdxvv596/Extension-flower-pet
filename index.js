@@ -3,6 +3,7 @@ import {
     eventSource,
     event_types,
     saveSettingsDebounced,
+    
 } from '../../../../script.js';
 import { extension_settings } from '../../../extensions.js';
 import { t } from '../../../i18n.js';
@@ -10,7 +11,10 @@ import { t } from '../../../i18n.js';
 const MODULE = 'flower_pet';
 
 // --- 配置和常量 ---
-const LONG_PRESS_DURATION = 300;
+// 检测是否为移动设备
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+// 根据设备类型调整长按延迟时间（手机上更短）
+const LONG_PRESS_DURATION = isMobile ? 150 : 300;
 const WATER_COOLDOWN = 15 * 60 * 1000;
 const SUNLIGHT_COOLDOWN = 15 * 60 * 1000;
 const BUG_CHANCE = 0.05;
@@ -63,8 +67,10 @@ function handlePressStart(e) {
 function handlePressMove(e) {
     if (!isDragging) return;
     e.preventDefault();
-    const clientX = e.type === 'touchmove' ? e.touches[0].clientX : e.clientX;
-    const clientY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+    
+    // 对于移动设备，使用pageX/pageY代替clientX/clientY以避免视口滚动问题
+    const clientX = e.type === 'touchmove' ? e.touches[0].pageX : e.pageX;
+    const clientY = e.type === 'touchmove' ? e.touches[0].pageY : e.pageY;
     
     let newLeft = clientX - offsetX;
     let newTop = clientY - offsetY;
@@ -73,8 +79,20 @@ function handlePressMove(e) {
     const maxLeft = window.innerWidth - petContainer.offsetWidth - MARGIN;
     const maxTop = window.innerHeight - petContainer.offsetHeight - MARGIN;
     
-    dragPosition.x = Math.max(MARGIN, Math.min(newLeft, maxLeft));
-    dragPosition.y = Math.max(MARGIN, Math.min(newTop, maxTop));
+    // 对于移动设备，添加额外的平滑处理
+    if (isMobile) {
+        // 使用requestAnimationFrame确保平滑更新
+        if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(() => {
+                dragPosition.x = Math.max(MARGIN, Math.min(newLeft, maxLeft));
+                dragPosition.y = Math.max(MARGIN, Math.min(newTop, maxTop));
+                animationFrameId = null;
+            });
+        }
+    } else {
+        dragPosition.x = Math.max(MARGIN, Math.min(newLeft, maxLeft));
+        dragPosition.y = Math.max(MARGIN, Math.min(newTop, maxTop));
+    }
 }
 
 function handlePressEnd(e) {
@@ -116,8 +134,21 @@ function createPetUI() {
     stageDisplay = document.getElementById('flower-pet-stage'); bugDisplay = document.getElementById('flower-pet-bug'); progressFill = document.getElementById('flower-pet-progress-fill'); actionsContainer = document.getElementById('flower-pet-actions'); waterButton = document.getElementById('flower-pet-water'); sunlightButton = document.getElementById('flower-pet-sunlight'); bugButton = document.getElementById('flower-pet-bug-action'); progressBar = document.getElementById('flower-pet-progress-bar');
     
     // 统一的事件监听器
-    petContainer.addEventListener('mousedown', handlePressStart); document.addEventListener('mousemove', handlePressMove); document.addEventListener('mouseup', handlePressEnd);
-    petContainer.addEventListener('touchstart', handlePressStart, { passive: false }); document.addEventListener('touchmove', handlePressMove, { passive: false }); document.addEventListener('touchend', handlePressEnd);
+    // 鼠标事件
+    petContainer.addEventListener('mousedown', handlePressStart);
+    document.addEventListener('mousemove', handlePressMove);
+    document.addEventListener('mouseup', handlePressEnd);
+    
+    // 触摸事件 - 针对移动设备优化
+    // 对于touchstart和touchmove，根据设备类型设置passive参数
+    // 在移动设备上，passive设为true可以提高滚动性能
+    const touchPassive = isMobile ? { passive: true } : { passive: false };
+    
+    petContainer.addEventListener('touchstart', handlePressStart, touchPassive);
+    document.addEventListener('touchmove', handlePressMove, touchPassive);
+    document.addEventListener('touchend', handlePressEnd);
+    // 添加touchcancel事件处理，确保在触摸被中断时正确清理状态
+    document.addEventListener('touchcancel', handlePressEnd);
     
     // 关键修复：按钮只监听 'click'，不再需要复杂的触摸模拟
     waterButton.addEventListener('click', waterPlant);
